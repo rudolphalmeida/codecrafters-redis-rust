@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{Read, Write},
     net::{TcpListener, TcpStream},
 };
 
@@ -17,5 +17,8 @@ fn main() {
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let _ = stream.write_all("+PONG\r\n".as_bytes());
+    let mut buf = [0x00; 512];
+    while let Ok(_) = stream.read(&mut buf) {
+        let _ = stream.write_all("+PONG\r\n".as_bytes());
+    }
 }
