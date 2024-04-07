@@ -62,12 +62,12 @@ impl StorageContext {
             if let Some(timeout) = value.timeout {
                 if value.created_on + timeout <= Instant::now() {
                     self.storage.remove(key);
-                    return "$-1\r\n".to_string();
+                    return "$-1".to_string();
                 }
             }
             format_success_simple_string(&value.value)
         } else {
-            "$-1\r\n".to_string()
+            "$-1".to_string()
         }
     }
 
