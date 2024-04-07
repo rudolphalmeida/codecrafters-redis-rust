@@ -1,4 +1,4 @@
-use std::{error::Error, sync::Arc};
+use std::{env::Args, error::Error, sync::Arc};
 
 use format::format_error_simple_string;
 use tokio::{
@@ -14,9 +14,45 @@ mod context;
 mod format;
 mod parser;
 
+#[derive(Debug, Clone, Copy)]
+struct Config {
+    port: u16,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self { port: 6379 }
+    }
+}
+
+impl Config {
+    fn from_args(args: Args) -> Result<Self, String> {
+        let mut args = args.skip(1);
+        let port = if let Some(arg) = args.next() {
+            if arg == "--port" {
+                let port = args.next().ok_or("expected port number to follow --port")?;
+                port.parse::<u16>().map_err(|e| {
+                    format!(
+                        "failed to parse port number '{}' with '{}'",
+                        port,
+                        e.to_string()
+                    )
+                })?
+            } else {
+                return Err(format!("unknown parameter '{}'", arg));
+            }
+        } else {
+            6379
+        };
+
+        Ok(Self { port })
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind("127.0.0.1:6379").await?;
+    let config = Config::from_args(std::env::args())?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
     // TODO: Replace with std::sync::Mutex
     let context = Arc::new(Mutex::new(StorageContext::new()));
 
