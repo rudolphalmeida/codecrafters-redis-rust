@@ -7,6 +7,8 @@ pub enum RedisCommand {
     #[default]
     Ping,
     Echo(String),
+    Get(String),
+    Set(String, String),
 }
 
 pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
@@ -24,6 +26,8 @@ pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
     match command.to_lowercase().as_str() {
         "ping" => return Ok(RedisCommand::Ping),
         "echo" => return Ok(parse_echo_command(&mut lines)?),
+        "get" => return Ok(parse_get_command(&mut lines)?),
+        "set" => return Ok(parse_set_command(&mut lines)?),
         _ => return Err(format!("unknown command '{}'", command)),
     }
 }
@@ -59,4 +63,15 @@ fn parse_integer_line(line: &str) -> Result<i32, String> {
 fn parse_echo_command(lines: &mut Lines) -> Result<RedisCommand, String> {
     let line = parse_bulk_string(lines)?;
     Ok(RedisCommand::Echo(line))
+}
+
+fn parse_get_command(lines: &mut Lines) -> Result<RedisCommand, String> {
+    let line = parse_bulk_string(lines)?;
+    Ok(RedisCommand::Get(line))
+}
+
+fn parse_set_command(lines: &mut Lines) -> Result<RedisCommand, String> {
+    let key = parse_bulk_string(lines)?;
+    let value = parse_bulk_string(lines)?;
+    Ok(RedisCommand::Set(key, value))
 }

@@ -1,26 +1,30 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 
 use format::format_error_simple_string;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::Mutex,
 };
 
-use execute::execute_command;
+use context::StorageContext;
 use parser::parse_input;
 
-mod execute;
+mod context;
 mod format;
 mod parser;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
+    // TODO: Replace with std::sync::Mutex
+    let context = Arc::new(Mutex::new(StorageContext::new()));
 
     loop {
         let (mut socket, _) = listener.accept().await?;
+        let context = Arc::clone(&context);
         tokio::spawn(async move {
-            match handle_connection(&mut socket).await {
+            match handle_connection(&mut socket, context).await {
                 Ok(_) => {}
                 Err(err) => socket
                     .write_all(format_error_simple_string(&err).as_bytes())
@@ -31,7 +35,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn handle_connection(socket: &mut TcpStream) -> Result<(), String> {
+async fn handle_connection(
+    socket: &mut TcpStream,
+    context: Arc<Mutex<StorageContext>>,
+) -> Result<(), String> {
     loop {
         socket
             .readable()
@@ -48,7 +55,9 @@ async fn handle_connection(socket: &mut TcpStream) -> Result<(), String> {
 
         let input = String::from_utf8(input.into()).map_err(|_| "invalid utf-8".to_string())?;
         let command = parse_input(&input)?;
-        let response = execute_command(command)?;
+        // TODO: This guard needs to be localized to the `execute_command` line
+        let mut guard = context.lock().await;
+        let response = guard.execute_command(command)?;
         write_response(socket, response).await?;
     }
 
