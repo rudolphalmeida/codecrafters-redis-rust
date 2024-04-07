@@ -5,9 +5,9 @@ pub fn format_bulk_string(line: &str) -> String {
 }
 
 pub fn format_success_simple_string(line: &str) -> String {
-    format!("+{}\r\n", line)
+    format!("+{}", line)
 }
 
 pub fn format_error_simple_string(line: &str) -> String {
-    format!("-{}\r\n", line)
+    format!("-{}", line)
 }
