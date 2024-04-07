@@ -9,6 +9,7 @@ pub enum RedisCommand {
     Echo(String),
     Get(String),
     Set(String, String, Option<Duration>),
+    Info(String),
 }
 
 pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
@@ -28,6 +29,7 @@ pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
         "echo" => return Ok(parse_echo_command(&mut lines)?),
         "get" => return Ok(parse_get_command(&mut lines)?),
         "set" => return Ok(parse_set_command(&mut lines)?),
+        "info" => return Ok(parse_info_command(&mut lines)?),
         _ => return Err(format!("unknown command '{}'", command)),
     }
 }
@@ -89,6 +91,11 @@ fn parse_set_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisComma
     };
 
     Ok(RedisCommand::Set(key, value, timeout))
+}
+
+fn parse_info_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisCommand, String> {
+    let section = parse_bulk_string(lines)?;
+    Ok(RedisCommand::Info(section))
 }
 
 fn parse_argument(lines: &mut dyn Iterator<Item = &str>) -> Result<(String, String), String> {
