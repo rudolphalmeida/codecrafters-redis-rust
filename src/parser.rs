@@ -1,6 +1,6 @@
 //! Redis protocol spec: https://redis.io/docs/reference/protocol-spec/
 
-use std::str::Lines;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Default)]
 pub enum RedisCommand {
@@ -8,7 +8,7 @@ pub enum RedisCommand {
     Ping,
     Echo(String),
     Get(String),
-    Set(String, String),
+    Set(String, String, Option<Duration>),
 }
 
 pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
@@ -32,7 +32,7 @@ pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
     }
 }
 
-fn parse_bulk_string(lines: &mut Lines) -> Result<String, String> {
+fn parse_bulk_string(lines: &mut dyn Iterator<Item = &str>) -> Result<String, String> {
     let size_line = lines
         .next()
         .ok_or("expected a line with format  $<size>".to_string())?;
@@ -51,27 +51,60 @@ fn parse_bulk_string(lines: &mut Lines) -> Result<String, String> {
 
 fn parse_integer_line(line: &str) -> Result<i32, String> {
     if line.chars().next().unwrap_or('_') != '$' {
-        return Err("expected size line to begin with '$'".to_string());
+        return Err("expected integer line to begin with '$'".to_string());
     }
-    let size: i32 = line[1..]
+    let value: i32 = line[1..]
         .parse()
-        .map_err(|_| format!("could not parse size on {}", line))?;
+        .map_err(|_| format!("could not parse integer on {}", line))?;
 
-    Ok(size)
+    Ok(value)
 }
 
-fn parse_echo_command(lines: &mut Lines) -> Result<RedisCommand, String> {
+fn parse_echo_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisCommand, String> {
     let line = parse_bulk_string(lines)?;
     Ok(RedisCommand::Echo(line))
 }
 
-fn parse_get_command(lines: &mut Lines) -> Result<RedisCommand, String> {
+fn parse_get_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisCommand, String> {
     let line = parse_bulk_string(lines)?;
     Ok(RedisCommand::Get(line))
 }
 
-fn parse_set_command(lines: &mut Lines) -> Result<RedisCommand, String> {
+fn parse_set_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisCommand, String> {
     let key = parse_bulk_string(lines)?;
     let value = parse_bulk_string(lines)?;
-    Ok(RedisCommand::Set(key, value))
+    let timeout = match parse_optional(parse_argument, lines) {
+        Some((arg, value)) if arg == "px" => {
+            let millis = value.parse::<u64>().map_err(|e| {
+                format!(
+                    "failed to parse value for 'px' {} with {}",
+                    value,
+                    e.to_string()
+                )
+            })?;
+            Some(Duration::from_millis(millis))
+        }
+        Some((arg, _)) => return Err(format!("unknown argument '{}' to SET", arg)),
+        None => None,
+    };
+
+    Ok(RedisCommand::Set(key, value, timeout))
+}
+
+fn parse_argument(lines: &mut dyn Iterator<Item = &str>) -> Result<(String, String), String> {
+    let arg = parse_bulk_string(lines)?;
+    let value = parse_bulk_string(lines)?;
+    Ok((arg, value))
+}
+
+// Utilities
+fn parse_optional<T, F>(func: F, lines: &mut dyn Iterator<Item = &str>) -> Option<T>
+where
+    F: Fn(&mut dyn Iterator<Item = &str>) -> Result<T, String>,
+{
+    let mut lines = lines.peekable();
+    match func(&mut lines) {
+        Ok(value) => Some(value),
+        Err(_) => None,
+    }
 }
