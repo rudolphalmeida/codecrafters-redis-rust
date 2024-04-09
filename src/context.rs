@@ -6,6 +6,7 @@ use std::{
 use crate::{
     format::{format_bulk_string_line, format_success_simple_string},
     parser::RedisCommand,
+    Config,
 };
 
 #[derive(Debug, Clone)]
@@ -33,15 +34,28 @@ impl Value {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+enum Role {
+    #[default]
+    Master,
+    Slave,
+}
+
 #[derive(Debug, Clone)]
 pub struct StorageContext {
+    role: Role,
     storage: HashMap<String, Value>,
 }
 
 impl StorageContext {
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Self {
         Self {
             storage: HashMap::new(),
+            role: if config.replica_of.is_some() {
+                Role::Slave
+            } else {
+                Role::Master
+            },
         }
     }
 
@@ -92,6 +106,10 @@ impl StorageContext {
             return "$-1".to_string();
         }
 
-        format_bulk_string_line("role:master")
+        let role = match self.role {
+            Role::Master => "master",
+            Role::Slave => "slave",
+        };
+        format_bulk_string_line(&format!("role:{}", role))
     }
 }
