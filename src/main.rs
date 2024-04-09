@@ -47,15 +47,14 @@ impl Config {
 
     fn read_port(args: &mut dyn Iterator<Item = String>) -> Result<u16, String> {
         let port = args.next().ok_or("expected port number to follow --port")?;
-        Ok(port.parse::<u16>().map_err(|e| e.to_string())?)
+        port.parse::<u16>().map_err(|e| e.to_string())
     }
 
     fn read_replicaof(args: &mut dyn Iterator<Item = String>) -> Result<(String, u16), String> {
-        let ip = args.next().ok_or(format!(
-            "expected ip address of master to follow --replicaof"
-        ))?;
-        let port = args.next().ok_or("expected port to follow ip address")?;
-        let port = port.parse::<u16>().map_err(|e| e.to_string())?;
+        let ip = args
+            .next()
+            .ok_or("expected ip address of master to follow --replicaof".to_string())?;
+        let port = Config::read_port(args)?;
         Ok((ip, port))
     }
 }
@@ -90,12 +89,12 @@ async fn handle_connection(
         socket
             .readable()
             .await
-            .map_err(|e| format!("error code: {}", e.to_string()))?;
+            .map_err(|e| format!("error code: {}", e))?;
         let mut input = [0; 512];
         let bytes_read = socket
             .read(&mut input)
             .await
-            .map_err(|e| format!("error code: {}", e.to_string()))?;
+            .map_err(|e| format!("error code: {}", e))?;
         if bytes_read == 0 {
             break;
         }
@@ -115,9 +114,9 @@ async fn write_response(socket: &mut TcpStream, response: String) -> Result<(), 
     socket
         .writable()
         .await
-        .map_err(|e| format!("error code: {}", e.to_string()))?;
+        .map_err(|e| format!("error code: {}", e))?;
     socket
         .write_all(format!("{}\r\n", response).as_bytes())
         .await
-        .map_err(|e| format!("error code: {}", e.to_string()))
+        .map_err(|e| format!("error code: {}", e))
 }

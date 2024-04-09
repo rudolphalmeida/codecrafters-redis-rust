@@ -25,12 +25,12 @@ pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
     let command = parse_bulk_string(&mut lines)?;
     // commands are case-insensitive
     match command.to_lowercase().as_str() {
-        "ping" => return Ok(RedisCommand::Ping),
-        "echo" => return Ok(parse_echo_command(&mut lines)?),
-        "get" => return Ok(parse_get_command(&mut lines)?),
-        "set" => return Ok(parse_set_command(&mut lines)?),
-        "info" => return Ok(parse_info_command(&mut lines)?),
-        _ => return Err(format!("unknown command '{}'", command)),
+        "ping" => Ok(RedisCommand::Ping),
+        "echo" => parse_echo_command(&mut lines),
+        "get" => parse_get_command(&mut lines),
+        "set" => parse_set_command(&mut lines),
+        "info" => parse_info_command(&mut lines),
+        _ => Err(format!("unknown command '{}'", command)),
     }
 }
 
@@ -77,13 +77,9 @@ fn parse_set_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisComma
     let value = parse_bulk_string(lines)?;
     let timeout = match parse_optional(parse_argument, lines) {
         Some((arg, value)) if arg == "px" => {
-            let millis = value.parse::<u64>().map_err(|e| {
-                format!(
-                    "failed to parse value for 'px' {} with {}",
-                    value,
-                    e.to_string()
-                )
-            })?;
+            let millis = value
+                .parse::<u64>()
+                .map_err(|e| format!("failed to parse value for 'px' {} with {}", value, e))?;
             Some(Duration::from_millis(millis))
         }
         Some((arg, _)) => return Err(format!("unknown argument '{}' to SET", arg)),

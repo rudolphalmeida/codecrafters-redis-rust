@@ -4,7 +4,9 @@ use std::{
 };
 
 use crate::{
-    format::{format_bulk_string_line, format_success_simple_string},
+    format::{
+        format_bulk_string_lines, format_single_bulk_string_line, format_success_simple_string,
+    },
     parser::RedisCommand,
     Config,
 };
@@ -62,7 +64,7 @@ impl StorageContext {
     pub fn execute_command(&mut self, command: RedisCommand) -> Result<String, String> {
         Ok(match command {
             RedisCommand::Ping => format_success_simple_string("PONG"),
-            RedisCommand::Echo(line) => format_bulk_string_line(&line),
+            RedisCommand::Echo(line) => format_single_bulk_string_line(&line),
             RedisCommand::Get(key) => self.execute_get_command(&key),
             RedisCommand::Set(key, value, timeout) => {
                 self.execute_set_command(&key, value, timeout)
@@ -110,6 +112,6 @@ impl StorageContext {
             Role::Master => "master",
             Role::Slave => "slave",
         };
-        format_bulk_string_line(&format!("role:{}", role))
+        format_bulk_string_lines(&format!("role:{}", role))
     }
 }
