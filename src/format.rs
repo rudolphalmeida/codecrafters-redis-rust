@@ -22,3 +22,14 @@ pub fn format_success_simple_string(line: &str) -> String {
 pub fn format_error_simple_string(line: &str) -> String {
     format!("-{}", line)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_success_simple_string() {
+        assert_eq!(format_success_simple_string("foo"), "+foo");
+        assert_eq!(format_success_simple_string("bar"), "+bar");
+    }
+}

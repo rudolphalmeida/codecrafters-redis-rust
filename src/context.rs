@@ -44,20 +44,33 @@ enum Role {
 }
 
 #[derive(Debug, Clone)]
+pub struct Replication {
+    pub id: String,
+    pub offset: u32,
+}
+
+#[derive(Debug, Clone)]
 pub struct StorageContext {
     role: Role,
     storage: HashMap<String, Value>,
+    replication: Replication,
 }
 
 impl StorageContext {
     pub fn new(config: &Config) -> Self {
+        let replication = Replication {
+            id: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb".to_string(),
+            offset: 0,
+        };
+        let role = if config.replica_of.is_some() {
+            Role::Slave
+        } else {
+            Role::Master
+        };
         Self {
             storage: HashMap::new(),
-            role: if config.replica_of.is_some() {
-                Role::Slave
-            } else {
-                Role::Master
-            },
+            role,
+            replication,
         }
     }
 
@@ -112,6 +125,16 @@ impl StorageContext {
             Role::Master => "master",
             Role::Slave => "slave",
         };
-        format_bulk_string_lines(&format!("role:{}", role))
+        let mut additional = String::new();
+        if matches!(self.role, Role::Master) {
+            additional = format!(
+                "master_replid:{}\nmaster_repl_offset:{}",
+                self.replication.id, self.replication.offset
+            );
+        }
+
+        let res = format_bulk_string_lines(&format!("role:{}\n{}", role, additional));
+        println!("{}", res);
+        res
     }
 }
