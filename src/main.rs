@@ -1,18 +1,29 @@
 use std::{env::Args, error::Error, sync::Arc};
 
-use format::format_error_simple_string;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-    sync::Mutex,
-};
+use connection::{ClientConnection, Connection};
+use tokio::{net::TcpListener, sync::Mutex};
 
 use context::StorageContext;
-use parser::parse_input;
 
+mod connection;
 mod context;
 mod format;
 mod parser;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let config = Config::from_args(std::env::args())?;
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
+    let context = Arc::new(Mutex::new(StorageContext::new(&config)));
+
+    loop {
+        let (socket, _) = listener.accept().await?;
+        let context = Arc::clone(&context);
+        tokio::spawn(async move {
+            let _ = ClientConnection::new(socket).handle(context).await;
+        });
+    }
+}
 
 #[derive(Debug, Clone)]
 struct Config {
@@ -57,66 +68,4 @@ impl Config {
         let port = Config::read_port(args)?;
         Ok((ip, port))
     }
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let config = Config::from_args(std::env::args())?;
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
-    // TODO: Replace with std::sync::Mutex
-    let context = Arc::new(Mutex::new(StorageContext::new(&config)));
-
-    loop {
-        let (mut socket, _) = listener.accept().await?;
-        let context = Arc::clone(&context);
-        tokio::spawn(async move {
-            match handle_connection(&mut socket, context).await {
-                Ok(_) => {}
-                Err(err) => socket
-                    .write_all(format_error_simple_string(&err).as_bytes())
-                    .await
-                    .unwrap(),
-            }
-        });
-    }
-}
-
-async fn handle_connection(
-    socket: &mut TcpStream,
-    context: Arc<Mutex<StorageContext>>,
-) -> Result<(), String> {
-    loop {
-        socket
-            .readable()
-            .await
-            .map_err(|e| format!("error code: {}", e))?;
-        let mut input = [0; 512];
-        let bytes_read = socket
-            .read(&mut input)
-            .await
-            .map_err(|e| format!("error code: {}", e))?;
-        if bytes_read == 0 {
-            break;
-        }
-
-        let input = String::from_utf8(input.into()).map_err(|_| "invalid utf-8".to_string())?;
-        let command = parse_input(&input)?;
-        // TODO: This guard needs to be localized to the `execute_command` line
-        let mut guard = context.lock().await;
-        let response = guard.execute_command(command)?;
-        write_response(socket, response).await?;
-    }
-
-    Ok(())
-}
-
-async fn write_response(socket: &mut TcpStream, response: String) -> Result<(), String> {
-    socket
-        .writable()
-        .await
-        .map_err(|e| format!("error code: {}", e))?;
-    socket
-        .write_all(format!("{}\r\n", response).as_bytes())
-        .await
-        .map_err(|e| format!("error code: {}", e))
 }

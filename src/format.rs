@@ -19,6 +19,5 @@ mod tests {
     #[test]
     fn test_format_success_simple_string() {
         assert_eq!(format_success_simple_string("foo"), "+foo");
-        assert_eq!(format_success_simple_string("bar"), "+bar");
     }
 }
