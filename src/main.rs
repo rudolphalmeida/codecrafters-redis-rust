@@ -1,4 +1,9 @@
-use std::{env::Args, io, process::exit, sync::Arc};
+use std::{
+    env::Args,
+    io::{self, ErrorKind},
+    process::exit,
+    sync::Arc,
+};
 
 use connection::Connection;
 use format::format_resp_array;
@@ -26,7 +31,37 @@ async fn main() -> io::Result<()> {
         let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
         let mut connection = Connection::new(stream);
         connection.write(format_resp_array("ping")).await?;
+        let response = connection.read().await?;
+        if !response.to_lowercase().contains("pong") {
+            return Err(io::Error::new(
+                ErrorKind::ConnectionAborted,
+                "invalid response from master",
+            ));
+        }
+        connection
+            .write(format_resp_array(&format!(
+                "REPLCONF\nlistening-port\n{}",
+                config.port
+            )))
+            .await?;
         let _response = connection.read().await?;
+        // if !response.to_lowercase().contains("ok") {
+        //     return Err(io::Error::new(
+        //         ErrorKind::ConnectionAborted,
+        //         "invalid response from master",
+        //     ));
+        // }
+
+        connection
+            .write(format_resp_array("REPLCONF\nlistening-port\npsync2"))
+            .await?;
+        let _response = connection.read().await?;
+        // if !response.to_lowercase().contains("ok") {
+        //     return Err(io::Error::new(
+        //         ErrorKind::ConnectionAborted,
+        //         "invalid response from master",
+        //     ));
+        // }
     };
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
@@ -38,8 +73,7 @@ async fn client_listener_loop(
     context: Arc<Mutex<StorageContext>>,
 ) -> io::Result<()> {
     loop {
-        let (socket, addr) = listener.accept().await?;
-        println!("connection from {:?}", addr);
+        let (socket, _) = listener.accept().await?;
         let context = Arc::clone(&context);
         tokio::spawn(async move {
             let _ = Connection::new(socket).handle(context).await;
