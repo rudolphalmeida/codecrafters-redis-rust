@@ -114,16 +114,16 @@ impl ReplicaConnection {
 
 impl Connection for ReplicaConnection {
     async fn handle(&mut self, _context: Arc<Mutex<StorageContext>>) -> io::Result<()> {
-        let _ = match self.handshake().await {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                // TODO: Exponential backoff retry
-                self.stream
-                    .write_all(format_error_simple_string(&err).as_bytes())
-                    .await
-            }
-        };
-
-        Ok(())
+        loop {
+            let _ = match self.handshake().await {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    // TODO: Exponential backoff retry
+                    self.stream
+                        .write_all(format_error_simple_string(&err).as_bytes())
+                        .await
+                }
+            };
+        }
     }
 }
