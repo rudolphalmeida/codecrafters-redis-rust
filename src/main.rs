@@ -62,6 +62,9 @@ async fn main() -> io::Result<()> {
         //         "invalid response from master",
         //     ));
         // }
+
+        connection.write(format_resp_array("PSYNC\n?\n-1")).await?;
+        let _response = connection.read().await?;
     };
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
