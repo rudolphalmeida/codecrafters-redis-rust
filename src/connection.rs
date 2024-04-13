@@ -30,8 +30,12 @@ impl Connection {
                 continue;
             }
 
-            return String::from_utf8(input[..bytes_read].into())
-                .map_err(|_| Error::new(io::ErrorKind::InvalidData, "received invalid utf-8"));
+            return String::from_utf8(input[..bytes_read].into()).map_err(|e| {
+                Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("received invalid utf-8: {}", e),
+                )
+            });
         }
     }
 
