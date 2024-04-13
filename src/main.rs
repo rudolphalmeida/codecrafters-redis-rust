@@ -1,7 +1,10 @@
-use std::{env::Args, error::Error, sync::Arc};
+use std::{env::Args, error::Error, io, process::exit, sync::Arc};
 
-use connection::{ClientConnection, Connection};
-use tokio::{net::TcpListener, sync::Mutex};
+use connection::{ClientConnection, Connection, ReplicaConnection};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::Mutex,
+};
 
 use context::StorageContext;
 
@@ -12,10 +15,26 @@ mod parser;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let config = Config::from_args(std::env::args())?;
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
+    let config = Config::from_args(std::env::args()).unwrap_or_else(|err| {
+        eprintln!("Error: {}", err);
+        exit(-1);
+    });
     let context = Arc::new(Mutex::new(StorageContext::new(&config)));
 
+    Ok(if let Some((ref ip, port)) = config.replica_of {
+        let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
+        let mut connection = ReplicaConnection::new(stream);
+        connection.handle(context).await
+    } else {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
+        client_listener_loop(listener, context).await
+    }?)
+}
+
+async fn client_listener_loop(
+    listener: TcpListener,
+    context: Arc<Mutex<StorageContext>>,
+) -> io::Result<()> {
     loop {
         let (socket, _) = listener.accept().await?;
         let context = Arc::clone(&context);
