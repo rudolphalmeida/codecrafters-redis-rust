@@ -30,6 +30,8 @@ impl Connection {
                 continue;
             }
 
+            println!("{:?}", input);
+
             return String::from_utf8(input[..bytes_read].into()).map_err(|e| {
                 Error::new(
                     io::ErrorKind::InvalidData,
