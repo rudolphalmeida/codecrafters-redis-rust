@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Error},
-    sync::Arc,
-};
+use std::{io, sync::Arc};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -30,14 +27,7 @@ impl Connection {
                 continue;
             }
 
-            println!("{:?}", input);
-
-            return String::from_utf8(input[..bytes_read].into()).map_err(|e| {
-                Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("received invalid utf-8: {}", e),
-                )
-            });
+            return Ok(String::from_utf8_lossy(input[..bytes_read].into()).to_string());
         }
     }
 
