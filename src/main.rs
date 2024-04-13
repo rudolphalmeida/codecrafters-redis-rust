@@ -1,9 +1,8 @@
 use std::{env::Args, io, process::exit, sync::Arc};
 
-use connection::{write_response, ClientConnection, Connection};
+use connection::Connection;
 use format::format_resp_array;
 use tokio::{
-    io::AsyncReadExt,
     net::{TcpListener, TcpStream},
     sync::Mutex,
 };
@@ -16,7 +15,7 @@ mod format;
 mod parser;
 
 #[tokio::main]
-async fn main() -> Result<(), String> {
+async fn main() -> io::Result<()> {
     let config = Config::from_args(std::env::args()).unwrap_or_else(|err| {
         eprintln!("Error: {}", err);
         exit(-1);
@@ -24,32 +23,14 @@ async fn main() -> Result<(), String> {
     let context = Arc::new(Mutex::new(StorageContext::new(&config)));
 
     if let Some((ref ip, port)) = config.replica_of {
-        let mut stream = TcpStream::connect(format!("{}:{}", ip, port))
-            .await
-            .unwrap();
-        write_response(&mut stream, format_resp_array("ping"))
-            .await
-            .unwrap();
-
-        stream
-            .readable()
-            .await
-            .map_err(|e| format!("error code: {}", e))
-            .unwrap();
-        let mut input = [0; 512];
-        let bytes_read = stream.read(&mut input).await.unwrap();
-        if bytes_read == 0 {
-            return Err("failed to read response to PING".to_string());
-        }
-        let _response = String::from_utf8(input.into()).unwrap();
+        let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
+        let mut connection = Connection::new(stream);
+        connection.write(format_resp_array("ping")).await?;
+        let _response = connection.read().await?;
     };
 
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port))
-        .await
-        .unwrap();
-    client_listener_loop(listener, context).await.unwrap();
-
-    Ok(())
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
+    client_listener_loop(listener, context).await
 }
 
 async fn client_listener_loop(
@@ -57,10 +38,11 @@ async fn client_listener_loop(
     context: Arc<Mutex<StorageContext>>,
 ) -> io::Result<()> {
     loop {
-        let (socket, _) = listener.accept().await?;
+        let (socket, addr) = listener.accept().await?;
+        println!("connection from {:?}", addr);
         let context = Arc::clone(&context);
         tokio::spawn(async move {
-            let _ = ClientConnection::new(socket).handle(context).await;
+            let _ = Connection::new(socket).handle(context).await;
         });
     }
 }

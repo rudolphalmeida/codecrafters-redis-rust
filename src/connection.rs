@@ -1,4 +1,7 @@
-use std::{io, sync::Arc};
+use std::{
+    io::{self, Error},
+    sync::Arc,
+};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -8,28 +11,36 @@ use tokio::{
 
 use crate::{context::StorageContext, format::format_error_simple_string, parser::parse_input};
 
-pub trait Connection {
-    async fn handle(&mut self, context: Arc<Mutex<StorageContext>>) -> io::Result<()>;
-}
-
-pub async fn write_response(stream: &mut TcpStream, response: String) -> Result<(), String> {
-    stream
-        .writable()
-        .await
-        .map_err(|e| format!("error code: {}", e))?;
-    stream
-        .write_all(format!("{}\r\n", response).as_bytes())
-        .await
-        .map_err(|e| format!("error code: {}", e))
-}
-
-pub struct ClientConnection {
+pub struct Connection {
     stream: TcpStream,
 }
 
-impl ClientConnection {
-    pub fn new(socket: TcpStream) -> Self {
-        Self { stream: socket }
+impl Connection {
+    pub fn new(stream: TcpStream) -> Self {
+        Self { stream }
+    }
+
+    pub async fn read(&mut self) -> io::Result<String> {
+        let mut input = [0; 512];
+
+        loop {
+            self.stream.readable().await?;
+            let bytes_read = self.stream.read(&mut input).await?;
+            if bytes_read == 0 {
+                continue;
+            }
+
+            return String::from_utf8(input[..bytes_read].into())
+                .map_err(|_| Error::new(io::ErrorKind::InvalidData, "received invalid utf-8"));
+        }
+    }
+
+    pub async fn write(&mut self, response: String) -> io::Result<()> {
+        self.stream.writable().await?;
+        self.stream
+            .write_all(format!("{}\r\n", response).as_bytes())
+            .await?;
+        Ok(())
     }
 
     async fn handle_client_loop(
@@ -37,42 +48,22 @@ impl ClientConnection {
         context: Arc<Mutex<StorageContext>>,
     ) -> Result<(), String> {
         loop {
-            self.stream
-                .readable()
-                .await
-                .map_err(|e| format!("error code: {}", e))?;
-            let mut input = [0; 512];
-            let bytes_read = self
-                .stream
-                .read(&mut input)
-                .await
-                .map_err(|e| format!("error code: {}", e))?;
-            if bytes_read == 0 {
-                break;
-            }
-
-            let input = String::from_utf8(input.into()).map_err(|_| "invalid utf-8".to_string())?;
+            let input = self.read().await.map_err(|e| e.to_string())?;
             let command = parse_input(&input)?;
             let response = {
                 let mut guard = context.lock().await;
                 guard.execute_command(command)?
             };
-            write_response(&mut self.stream, response).await?;
+            self.write(response)
+                .await
+                .map_err(|e| format!("error: {}", e))?;
         }
-
-        Ok(())
     }
-}
 
-impl Connection for ClientConnection {
-    async fn handle(&mut self, context: Arc<Mutex<StorageContext>>) -> io::Result<()> {
+    pub async fn handle(&mut self, context: Arc<Mutex<StorageContext>>) -> io::Result<()> {
         match self.handle_client_loop(context).await {
             Ok(_) => Ok(()),
-            Err(err) => {
-                self.stream
-                    .write_all(format_error_simple_string(&err).as_bytes())
-                    .await
-            }
+            Err(err) => self.write(format_error_simple_string(&err)).await,
         }
     }
 }
