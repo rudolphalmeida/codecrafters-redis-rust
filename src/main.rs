@@ -1,7 +1,9 @@
-use std::{env::Args, error::Error, io, process::exit, sync::Arc};
+use std::{env::Args, io, process::exit, sync::Arc};
 
-use connection::{ClientConnection, Connection, ReplicaConnection};
+use connection::{write_response, ClientConnection, Connection};
+use format::format_resp_array;
 use tokio::{
+    io::AsyncReadExt,
     net::{TcpListener, TcpStream},
     sync::Mutex,
 };
@@ -14,21 +16,40 @@ mod format;
 mod parser;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), String> {
     let config = Config::from_args(std::env::args()).unwrap_or_else(|err| {
         eprintln!("Error: {}", err);
         exit(-1);
     });
     let context = Arc::new(Mutex::new(StorageContext::new(&config)));
 
-    Ok(if let Some((ref ip, port)) = config.replica_of {
-        let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
-        let mut connection = ReplicaConnection::new(stream);
-        connection.handle(context).await
-    } else {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
-        client_listener_loop(listener, context).await
-    }?)
+    if let Some((ref ip, port)) = config.replica_of {
+        let mut stream = TcpStream::connect(format!("{}:{}", ip, port))
+            .await
+            .unwrap();
+        write_response(&mut stream, format_resp_array("ping"))
+            .await
+            .unwrap();
+
+        stream
+            .readable()
+            .await
+            .map_err(|e| format!("error code: {}", e))
+            .unwrap();
+        let mut input = [0; 512];
+        let bytes_read = stream.read(&mut input).await.unwrap();
+        if bytes_read == 0 {
+            return Err("failed to read response to PING".to_string());
+        }
+        let _response = String::from_utf8(input.into()).unwrap();
+    };
+
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port))
+        .await
+        .unwrap();
+    client_listener_loop(listener, context).await.unwrap();
+
+    Ok(())
 }
 
 async fn client_listener_loop(
