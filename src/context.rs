@@ -125,7 +125,7 @@ impl StorageContext {
             return format!("unknown option '{}' to PSYNC", arg);
         }
 
-        format_success_simple_string(&format!("FULLRESYNC\n{}\n0", self.replication.id))
+        format_success_simple_string(&format!("FULLRESYNC {} 0", self.replication.id))
     }
 
     fn execute_info_command(&self, section: &str) -> String {
