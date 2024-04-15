@@ -2,12 +2,6 @@
 
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
-pub enum ReplConfOption {
-    ListeningPort(u16),
-    Capability(String),
-}
-
 #[derive(Debug, Clone, Default)]
 pub enum RedisCommand {
     #[default]
@@ -16,7 +10,8 @@ pub enum RedisCommand {
     Get(String),
     Set(String, String, Option<Duration>),
     Info(String),
-    ReplConf(ReplConfOption),
+    ReplConf(String, String),
+    PSync(String, String),
 }
 
 pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
@@ -32,6 +27,7 @@ pub fn parse_input(input: &str) -> Result<RedisCommand, String> {
         "set" => parse_set_command(&mut lines),
         "info" => parse_info_command(&mut lines),
         "replconf" => parse_replconf_command(&mut lines),
+        "psync" => parse_psync_command(&mut lines),
         _ => Err(format!("unknown command '{}'", command)),
     }
 }
@@ -121,16 +117,12 @@ fn parse_info_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisComm
 
 fn parse_replconf_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisCommand, String> {
     let (arg, value) = parse_argument(lines)?;
-    let option = match arg.to_lowercase().as_str() {
-        "listening-port" => ReplConfOption::ListeningPort(
-            value
-                .parse()
-                .map_err(|_| "failed to parse listening-port")?,
-        ),
-        "capa" => ReplConfOption::Capability(value),
-        _ => return Err(format!("unknown option '{}' to REPLCONG", arg)),
-    };
-    Ok(RedisCommand::ReplConf(option))
+    Ok(RedisCommand::ReplConf(arg, value))
+}
+
+fn parse_psync_command(lines: &mut dyn Iterator<Item = &str>) -> Result<RedisCommand, String> {
+    let (arg, value) = parse_argument(lines)?;
+    Ok(RedisCommand::PSync(arg, value))
 }
 
 fn parse_argument(lines: &mut dyn Iterator<Item = &str>) -> Result<(String, String), String> {

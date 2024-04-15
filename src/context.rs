@@ -81,7 +81,8 @@ impl StorageContext {
                 self.execute_set_command(&key, value, timeout)
             }
             RedisCommand::Info(section) => self.execute_info_command(&section),
-            RedisCommand::ReplConf(_) => format_success_simple_string("OK"),
+            RedisCommand::ReplConf(arg, value) => self.execute_replconf_command(arg, value),
+            RedisCommand::PSync(arg, value) => self.execute_psync_command(arg, value),
         })
     }
 
@@ -113,6 +114,18 @@ impl StorageContext {
             self.storage.insert(key.to_string(), Value::new(value));
         }
         format_success_simple_string("OK")
+    }
+
+    fn execute_replconf_command(&mut self, _arg: String, _value: String) -> String {
+        format_success_simple_string("OK")
+    }
+
+    fn execute_psync_command(&mut self, arg: String, _value: String) -> String {
+        if arg != "?" {
+            return format!("unknown option '{}' to PSYNC", arg);
+        }
+
+        format_success_simple_string(&format!("FULLRESYNC\n{}\n0", self.replication.id))
     }
 
     fn execute_info_command(&self, section: &str) -> String {

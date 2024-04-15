@@ -64,7 +64,8 @@ async fn main() -> io::Result<()> {
         }
 
         connection.write(format_resp_array("PSYNC\n?\n-1")).await?;
-        let _response = connection.read().await?;
+        let response = connection.read().await?;
+        println!("{}", response);
     };
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
