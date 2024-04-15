@@ -7,12 +7,9 @@ use std::{
 
 use connection::Connection;
 use format::format_resp_array;
-use tokio::{
-    net::{TcpListener, TcpStream},
-    sync::Mutex,
-};
+use tokio::net::{TcpListener, TcpStream};
 
-use context::StorageContext;
+use context::AppContext;
 
 mod connection;
 mod context;
@@ -25,7 +22,7 @@ async fn main() -> io::Result<()> {
         eprintln!("Error: {}", err);
         exit(-1);
     });
-    let context = Arc::new(Mutex::new(StorageContext::new(&config)));
+    let context = Arc::new(AppContext::new(&config));
 
     if let Some((ref ip, port)) = config.replica_of {
         let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
@@ -72,15 +69,13 @@ async fn main() -> io::Result<()> {
     client_listener_loop(listener, context).await
 }
 
-async fn client_listener_loop(
-    listener: TcpListener,
-    context: Arc<Mutex<StorageContext>>,
-) -> io::Result<()> {
+async fn client_listener_loop(listener: TcpListener, context: Arc<AppContext>) -> io::Result<()> {
     loop {
         let (socket, _) = listener.accept().await?;
         let context = Arc::clone(&context);
         tokio::spawn(async move {
-            let _ = Connection::new(socket).handle(context).await;
+            let mut connection = Connection::new(socket);
+            let _ = context.handle(&mut connection).await;
         });
     }
 }

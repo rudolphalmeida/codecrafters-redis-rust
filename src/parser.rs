@@ -39,7 +39,7 @@ fn parse_bulk_string_array<'a>(
     let num_lines: usize = len_line[1..]
         .parse()
         .map_err(|e| format!("failed to parse line count: {}", e))?;
-    if len_line.chars().next() != Some('*') || num_lines < 1 {
+    if !len_line.starts_with('*') || num_lines < 1 {
         return Err("expected first line to have format  *<size> where size >= 1".to_string());
     }
 

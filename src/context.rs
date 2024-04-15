@@ -1,11 +1,16 @@
 use std::{
     collections::HashMap,
+    io,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
+use tokio::sync::RwLock;
+
 use crate::{
-    format::{format_bulk_string_line, format_success_simple_string},
-    parser::RedisCommand,
+    connection::Connection,
+    format::{format_bulk_string_line, format_error_simple_string, format_success_simple_string},
+    parser::{parse_input, RedisCommand},
     Config,
 };
 
@@ -47,14 +52,14 @@ pub struct Replication {
     pub offset: u32,
 }
 
-#[derive(Debug, Clone)]
-pub struct StorageContext {
+#[derive(Debug)]
+pub struct AppContext {
     role: Role,
-    storage: HashMap<String, Value>,
+    storage: RwLock<HashMap<String, Value>>,
     replication: Replication,
 }
 
-impl StorageContext {
+impl AppContext {
     pub fn new(config: &Config) -> Self {
         let replication = Replication {
             id: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb".to_string(),
@@ -66,19 +71,41 @@ impl StorageContext {
             Role::Master
         };
         Self {
-            storage: HashMap::new(),
+            storage: RwLock::new(HashMap::new()),
             role,
             replication,
         }
     }
 
-    pub fn execute_command(&mut self, command: RedisCommand) -> Result<String, String> {
+    async fn handle_client_loop(
+        self: Arc<Self>,
+        connection: &mut Connection,
+    ) -> Result<(), String> {
+        loop {
+            let input = connection.read().await.map_err(|e| e.to_string())?;
+            let command = parse_input(&input)?;
+            let response = Arc::clone(&self).execute_command(command).await?;
+            connection
+                .write(response)
+                .await
+                .map_err(|e| format!("error: {}", e))?;
+        }
+    }
+
+    pub async fn handle(self: Arc<Self>, connection: &mut Connection) -> io::Result<()> {
+        match self.handle_client_loop(connection).await {
+            Ok(_) => Ok(()),
+            Err(err) => connection.write(format_error_simple_string(&err)).await,
+        }
+    }
+
+    async fn execute_command(self: Arc<Self>, command: RedisCommand) -> Result<String, String> {
         Ok(match command {
             RedisCommand::Ping => format_success_simple_string("PONG"),
             RedisCommand::Echo(line) => format_bulk_string_line(&line),
-            RedisCommand::Get(key) => self.execute_get_command(&key),
+            RedisCommand::Get(key) => self.execute_get_command(&key).await,
             RedisCommand::Set(key, value, timeout) => {
-                self.execute_set_command(&key, value, timeout)
+                self.execute_set_command(&key, value, timeout).await
             }
             RedisCommand::Info(section) => self.execute_info_command(&section),
             RedisCommand::ReplConf(arg, value) => self.execute_replconf_command(arg, value),
@@ -86,12 +113,12 @@ impl StorageContext {
         })
     }
 
-    fn execute_get_command(&mut self, key: &str) -> String {
-        if self.storage.contains_key(key) {
-            let value = self.storage.get(key).unwrap().clone();
+    async fn execute_get_command(self: Arc<Self>, key: &str) -> String {
+        if self.storage.read().await.contains_key(key) {
+            let value = self.storage.read().await.get(key).unwrap().clone();
             if let Some(timeout) = value.timeout {
                 if value.created_on + timeout <= Instant::now() {
-                    self.storage.remove(key);
+                    self.storage.write().await.remove(key);
                     return "$-1".to_string();
                 }
             }
@@ -101,26 +128,31 @@ impl StorageContext {
         }
     }
 
-    fn execute_set_command(
-        &mut self,
+    async fn execute_set_command(
+        self: Arc<Self>,
         key: &str,
         value: String,
         timeout: Option<Duration>,
     ) -> String {
         if let Some(timeout) = timeout {
             self.storage
+                .write()
+                .await
                 .insert(key.to_string(), Value::with_timeout(value, timeout));
         } else {
-            self.storage.insert(key.to_string(), Value::new(value));
+            self.storage
+                .write()
+                .await
+                .insert(key.to_string(), Value::new(value));
         }
         format_success_simple_string("OK")
     }
 
-    fn execute_replconf_command(&mut self, _arg: String, _value: String) -> String {
+    fn execute_replconf_command(self: Arc<Self>, _arg: String, _value: String) -> String {
         format_success_simple_string("OK")
     }
 
-    fn execute_psync_command(&mut self, arg: String, _value: String) -> String {
+    fn execute_psync_command(self: Arc<Self>, arg: String, _value: String) -> String {
         if arg != "?" {
             return format!("unknown option '{}' to PSYNC", arg);
         }
@@ -128,7 +160,7 @@ impl StorageContext {
         format_success_simple_string(&format!("FULLRESYNC {} 0", self.replication.id))
     }
 
-    fn execute_info_command(&self, section: &str) -> String {
+    fn execute_info_command(self: Arc<Self>, section: &str) -> String {
         if section != "replication" {
             return "$-1".to_string();
         }
