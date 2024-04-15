@@ -81,6 +81,7 @@ impl StorageContext {
                 self.execute_set_command(&key, value, timeout)
             }
             RedisCommand::Info(section) => self.execute_info_command(&section),
+            RedisCommand::ReplConf(_) => format_success_simple_string("OK"),
         })
     }
 

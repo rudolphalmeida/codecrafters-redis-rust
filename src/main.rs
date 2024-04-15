@@ -44,24 +44,24 @@ async fn main() -> io::Result<()> {
                 config.port
             )))
             .await?;
-        let _response = connection.read().await?;
-        // if !response.to_lowercase().contains("ok") {
-        //     return Err(io::Error::new(
-        //         ErrorKind::ConnectionAborted,
-        //         "invalid response from master",
-        //     ));
-        // }
+        let response = connection.read().await?;
+        if !response.to_lowercase().contains("ok") {
+            return Err(io::Error::new(
+                ErrorKind::ConnectionAborted,
+                "invalid response from master",
+            ));
+        }
 
         connection
             .write(format_resp_array("REPLCONF\ncapa\npsync2"))
             .await?;
-        let _response = connection.read().await?;
-        // if !response.to_lowercase().contains("ok") {
-        //     return Err(io::Error::new(
-        //         ErrorKind::ConnectionAborted,
-        //         "invalid response from master",
-        //     ));
-        // }
+        let response = connection.read().await?;
+        if !response.to_lowercase().contains("ok") {
+            return Err(io::Error::new(
+                ErrorKind::ConnectionAborted,
+                "invalid response from master",
+            ));
+        }
 
         connection.write(format_resp_array("PSYNC\n?\n-1")).await?;
         let _response = connection.read().await?;
