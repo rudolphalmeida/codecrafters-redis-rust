@@ -26,42 +26,8 @@ async fn main() -> io::Result<()> {
 
     if let Some((ref ip, port)) = config.replica_of {
         let stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
-        let mut connection = Connection::new(stream);
-        connection.write(format_resp_array("ping")).await?;
-        let response = connection.read().await?;
-        if !response.to_lowercase().contains("pong") {
-            return Err(io::Error::new(
-                ErrorKind::ConnectionAborted,
-                "invalid response from master to 'PING'",
-            ));
-        }
-        connection
-            .write(format_resp_array(&format!(
-                "REPLCONF\nlistening-port\n{}",
-                config.port
-            )))
-            .await?;
-        let response = connection.read().await?;
-        if !response.to_lowercase().contains("ok") {
-            return Err(io::Error::new(
-                ErrorKind::ConnectionAborted,
-                "invalid response from master to 'REPLCONF listening-port ...'",
-            ));
-        }
-
-        connection
-            .write(format_resp_array("REPLCONF\ncapa\npsync2"))
-            .await?;
-        let response = connection.read().await?;
-        if !response.to_lowercase().contains("ok") {
-            return Err(io::Error::new(
-                ErrorKind::ConnectionAborted,
-                "invalid response from master to 'REPLCONF capa psync2'",
-            ));
-        }
-
-        connection.write(format_resp_array("PSYNC\n?\n-1")).await?;
-        let _response = connection.read().await?;
+        let connection = Connection::new(stream);
+        replica_handshake(connection, &config).await?;
     };
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;
@@ -77,6 +43,47 @@ async fn client_listener_loop(listener: TcpListener, context: Arc<AppContext>) -
             let _ = context.handle(&mut connection).await;
         });
     }
+}
+
+async fn replica_handshake(mut connection: Connection, config: &Config) -> io::Result<()> {
+    connection.write(format_resp_array("ping")).await?;
+    let response = connection.read().await?;
+    if !response.to_lowercase().contains("pong") {
+        return Err(io::Error::new(
+            ErrorKind::ConnectionAborted,
+            "invalid response from master to 'PING'",
+        ));
+    }
+    connection
+        .write(format_resp_array(&format!(
+            "REPLCONF\nlistening-port\n{}",
+            config.port
+        )))
+        .await?;
+    let response = connection.read().await?;
+    if !response.to_lowercase().contains("ok") {
+        return Err(io::Error::new(
+            ErrorKind::ConnectionAborted,
+            "invalid response from master to 'REPLCONF listening-port ...'",
+        ));
+    }
+
+    connection
+        .write(format_resp_array("REPLCONF\ncapa\npsync2"))
+        .await?;
+    let response = connection.read().await?;
+    if !response.to_lowercase().contains("ok") {
+        return Err(io::Error::new(
+            ErrorKind::ConnectionAborted,
+            "invalid response from master to 'REPLCONF capa psync2'",
+        ));
+    }
+
+    connection.write(format_resp_array("PSYNC\n?\n-1")).await?;
+    let response = connection.read().await?;
+    println!("{response}");
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

@@ -8,7 +8,7 @@ use std::{
 use tokio::sync::RwLock;
 
 use crate::{
-    connection::Connection,
+    connection::{self, Connection},
     format::{format_bulk_string_line, format_error_simple_string, format_success_simple_string},
     parser::{parse_input, RedisCommand},
     Config,
@@ -159,7 +159,10 @@ impl AppContext {
             return format!("unknown option '{}' to PSYNC", arg);
         }
 
-        format_success_simple_string(&format!("FULLRESYNC {} 0", self.replication.id))
+        let resync_resp =
+            format_success_simple_string(&format!("FULLRESYNC {} 0", self.replication.id));
+        let rdb_resp = self.serialize_rdb();
+        format!("{resync_resp}{rdb_resp}")
     }
 
     fn execute_info_command(self: Arc<Self>, section: &str) -> String {
@@ -180,5 +183,11 @@ impl AppContext {
         }
 
         format_bulk_string_line(&format!("role:{}\n{}", role, additional))
+    }
+
+    fn serialize_rdb(self: Arc<Self>) -> String {
+        let rdb = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2".to_string();
+        let size = rdb.len() * 8;
+        format!("${size}\r\n{rdb}")
     }
 }
