@@ -8,7 +8,7 @@ use std::{
 use tokio::sync::RwLock;
 
 use crate::{
-    connection::{self, Connection},
+    connection::Connection,
     format::{format_bulk_string_line, format_error_simple_string, format_success_simple_string},
     parser::{parse_input, RedisCommand},
     Config,
@@ -187,7 +187,7 @@ impl AppContext {
 
     fn serialize_rdb(self: Arc<Self>) -> String {
         let rdb = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2".to_string();
-        let size = rdb.len() * 8;
+        let size = rdb.len();
         format!("${size}\r\n{rdb}")
     }
 }
