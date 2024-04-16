@@ -1,23 +1,23 @@
 //! Redis protocol spec: https://redis.io/docs/reference/protocol-spec/
 
 pub fn format_bulk_string_line(line: &str) -> String {
-    format!("${}\r\n{}", line.len(), line)
+    format!("${}\r\n{}\r\n", line.len(), line)
 }
 
 pub fn format_success_simple_string(line: &str) -> String {
-    format!("+{}", line)
+    format!("+{}\r\n", line)
 }
 
 pub fn format_error_simple_string(line: &str) -> String {
-    format!("-{}", line)
+    format!("-{}\r\n", line)
 }
 
 pub fn format_resp_array(value: &str) -> String {
     let lines = value.lines().count();
-    let mut formatted = format!("*{}", lines);
+    let mut formatted = format!("*{}\r\n", lines);
     for line in value.lines() {
         let bulk_formatted = format_bulk_string_line(line);
-        formatted = format!("{}\r\n{}", formatted, bulk_formatted);
+        formatted = format!("{}{}", formatted, bulk_formatted);
     }
 
     formatted
@@ -29,11 +29,11 @@ mod tests {
 
     #[test]
     fn test_format_success_simple_string() {
-        assert_eq!(format_success_simple_string("foo"), "+foo");
+        assert_eq!(format_success_simple_string("foo"), "+foo\r\n");
     }
 
     #[test]
     fn test_format_resp_array() {
-        assert_eq!(format_resp_array("ping"), "*1\r\n$4\r\nping");
+        assert_eq!(format_resp_array("ping"), "*1\r\n$4\r\nping\r\n");
     }
 }

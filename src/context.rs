@@ -14,6 +14,8 @@ use crate::{
     Config,
 };
 
+const NULL_BULK_STRING: &'static str = "$-1\r\n";
+
 #[derive(Debug, Clone)]
 struct Value {
     value: String,
@@ -119,12 +121,12 @@ impl AppContext {
             if let Some(timeout) = value.timeout {
                 if value.created_on + timeout <= Instant::now() {
                     self.storage.write().await.remove(key);
-                    return "$-1".to_string();
+                    return NULL_BULK_STRING.to_string();
                 }
             }
             format_success_simple_string(&value.value)
         } else {
-            "$-1".to_string()
+            NULL_BULK_STRING.to_string()
         }
     }
 
@@ -162,7 +164,7 @@ impl AppContext {
 
     fn execute_info_command(self: Arc<Self>, section: &str) -> String {
         if section != "replication" {
-            return "$-1".to_string();
+            return NULL_BULK_STRING.to_string();
         }
 
         let role = match self.role {

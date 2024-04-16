@@ -32,7 +32,7 @@ async fn main() -> io::Result<()> {
         if !response.to_lowercase().contains("pong") {
             return Err(io::Error::new(
                 ErrorKind::ConnectionAborted,
-                "invalid response from master",
+                "invalid response from master to 'PING'",
             ));
         }
         connection
@@ -45,7 +45,7 @@ async fn main() -> io::Result<()> {
         if !response.to_lowercase().contains("ok") {
             return Err(io::Error::new(
                 ErrorKind::ConnectionAborted,
-                "invalid response from master",
+                "invalid response from master to 'REPLCONF listening-port ...'",
             ));
         }
 
@@ -56,13 +56,12 @@ async fn main() -> io::Result<()> {
         if !response.to_lowercase().contains("ok") {
             return Err(io::Error::new(
                 ErrorKind::ConnectionAborted,
-                "invalid response from master",
+                "invalid response from master to 'REPLCONF capa psync2'",
             ));
         }
 
         connection.write(format_resp_array("PSYNC\n?\n-1")).await?;
-        let response = connection.read().await?;
-        println!("{}", response);
+        let _response = connection.read().await?;
     };
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", config.port)).await?;

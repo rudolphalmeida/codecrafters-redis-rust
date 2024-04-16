@@ -5,7 +5,6 @@ use tokio::{
     net::TcpStream,
 };
 
-
 pub struct Connection {
     stream: TcpStream,
 }
@@ -31,9 +30,7 @@ impl Connection {
 
     pub async fn write(&mut self, response: String) -> io::Result<()> {
         self.stream.writable().await?;
-        self.stream
-            .write_all(format!("{}\r\n", response).as_bytes())
-            .await?;
+        self.stream.write_all(response.as_bytes()).await?;
         Ok(())
     }
 }
