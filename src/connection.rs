@@ -29,8 +29,12 @@ impl Connection {
     }
 
     pub async fn write(&mut self, response: String) -> io::Result<()> {
+        self.write_bytes(response.as_bytes()).await
+    }
+
+    pub async fn write_bytes(&mut self, response: &[u8]) -> io::Result<()> {
         self.stream.writable().await?;
-        self.stream.write_all(response.as_bytes()).await?;
+        self.stream.write_all(response).await?;
         Ok(())
     }
 }
